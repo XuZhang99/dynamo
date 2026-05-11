@@ -1498,10 +1498,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 												},
 												Env: []corev1.EnvVar{
 													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
-													{
 														Name:  "DYN_HTTP_PORT",
 														Value: fmt.Sprintf("%d", commonconsts.DynamoServicePort),
 													},
@@ -1707,10 +1703,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 													FailureThreshold: 720,
 												},
 												Env: []corev1.EnvVar{
-													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
 													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
@@ -2110,10 +2102,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 												},
 												Env: []corev1.EnvVar{
 													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
-													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
 													},
@@ -2328,10 +2316,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 												},
 												Env: []corev1.EnvVar{
 													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
-													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
 													},
@@ -2522,10 +2506,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 													},
 												},
 												Env: []corev1.EnvVar{
-													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
 													{
 														Name:  "DYN_HTTP_PORT",
 														Value: fmt.Sprintf("%d", commonconsts.DynamoServicePort),
@@ -2723,10 +2703,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 													FailureThreshold: 720,
 												},
 												Env: []corev1.EnvVar{
-													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
 													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
@@ -3148,10 +3124,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 												},
 												Env: []corev1.EnvVar{
 													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
-													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
 													},
@@ -3353,10 +3325,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 												},
 												Env: []corev1.EnvVar{
 													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
-													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
 													},
@@ -3547,10 +3515,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 													},
 												},
 												Env: []corev1.EnvVar{
-													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
 													{
 														Name:  "DYN_HTTP_PORT",
 														Value: fmt.Sprintf("%d", commonconsts.DynamoServicePort),
@@ -3748,10 +3712,6 @@ func TestGenerateGrovePodCliqueSet(t *testing.T) {
 													FailureThreshold: 720,
 												},
 												Env: []corev1.EnvVar{
-													{
-														Name:  "CONTAINER_NAME",
-														Value: commonconsts.MainContainerName,
-													},
 													{
 														Name:  "DYNAMO_POD_GANG_SET_REPLICAS",
 														Value: "1",
@@ -5660,7 +5620,6 @@ func TestGenerateBasePodSpec_Worker(t *testing.T) {
 						Env: []corev1.EnvVar{
 							{Name: "ANOTHER_COMPONENTENV", Value: "true"},
 							{Name: "ANOTHER_CONTAINER_ENV", Value: "true"},
-							{Name: "CONTAINER_NAME", Value: commonconsts.MainContainerName},
 							{Name: commonconsts.DynamoComponentEnvVar, Value: "worker"},
 							{Name: commonconsts.DynamoDiscoveryBackendEnvVar, Value: "kubernetes"},
 							{Name: "DYN_FORWARDPASS_METRIC_PORT", Value: "20380"},
@@ -7756,6 +7715,44 @@ func TestFrontendDefaults_NamespacePrefixEnvVar(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "DYN_NAMESPACE_PREFIX should be set on frontend")
+}
+
+func TestBaseComponentDefaults_ContainerNameOnlyInContainerDiscoveryMode(t *testing.T) {
+	w := NewWorkerDefaults()
+
+	podModeContainer, err := w.GetBaseContainer(ComponentContext{
+		DynamoNamespace: "ns-dgd",
+		ComponentType:   commonconsts.ComponentTypeWorker,
+		Discovery: DiscoveryContext{
+			Backend: configv1alpha1.DiscoveryBackendKubernetes,
+			Mode:    configv1alpha1.KubeDiscoveryModePod,
+		},
+	})
+	require.NoError(t, err)
+	podModeEnv := envVarsToMap(podModeContainer.Env)
+	assert.NotContains(t, podModeEnv, "CONTAINER_NAME")
+	assert.NotContains(t, podModeEnv, "DYN_KUBE_DISCOVERY_MODE")
+
+	containerModeContainer, err := w.GetBaseContainer(ComponentContext{
+		DynamoNamespace: "ns-dgd",
+		ComponentType:   commonconsts.ComponentTypeWorker,
+		Discovery: DiscoveryContext{
+			Backend: configv1alpha1.DiscoveryBackendKubernetes,
+			Mode:    configv1alpha1.KubeDiscoveryModeContainer,
+		},
+	})
+	require.NoError(t, err)
+	containerModeEnv := envVarsToMap(containerModeContainer.Env)
+	assert.Equal(t, commonconsts.MainContainerName, containerModeEnv["CONTAINER_NAME"])
+	assert.Equal(t, string(configv1alpha1.KubeDiscoveryModeContainer), containerModeEnv["DYN_KUBE_DISCOVERY_MODE"])
+}
+
+func envVarsToMap(envs []corev1.EnvVar) map[string]string {
+	out := make(map[string]string, len(envs))
+	for _, env := range envs {
+		out[env.Name] = env.Value
+	}
+	return out
 }
 
 func TestGenerateBasePodSpec_FrontendSidecar(t *testing.T) {
