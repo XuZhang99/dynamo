@@ -68,6 +68,14 @@ _ap.add_argument(
     ),
 )
 _ap.add_argument(
+    "--family",
+    action="append",
+    help=(
+        "Limit capture to one parser family. May be repeated. Useful when "
+        "refreshing a newly wired peer without rewriting the full fixture corpus."
+    ),
+)
+_ap.add_argument(
     "--merge",
     action="store_true",
     help=(
@@ -96,9 +104,29 @@ _args = _ap.parse_args()
 IMPL = _args.impl
 MERGE_MODE = _args.merge
 OVERWRITE = _args.overwrite_if_exists
+FAMILY_FILTER = set(_args.family or [])
 
 if OVERWRITE and not MERGE_MODE:
     _ap.error("--overwrite-if-exists requires --merge")
+
+
+def _known_fixture_families() -> set[str]:
+    families = set()
+    for fp in sorted(FIXTURES.glob("*/PARSER.*.yaml")):
+        doc = yaml.safe_load(fp.read_text())
+        families.add(doc["family"])
+    return families
+
+
+if FAMILY_FILTER:
+    known_families = _known_fixture_families()
+    unknown_families = FAMILY_FILTER - known_families
+    if unknown_families:
+        _ap.error(
+            "unknown --family value(s): "
+            f"{', '.join(sorted(unknown_families))}. "
+            f"Known families: {', '.join(sorted(known_families))}"
+        )
 
 wrapper = importlib.import_module(
     f"tests.parity.parser.{IMPL}"
@@ -292,6 +320,8 @@ def merge_into_fixtures(
     for fp in sorted(FIXTURES.glob("*/PARSER.*.yaml")):
         doc = yaml.safe_load(fp.read_text(encoding="utf-8"))
         family = doc["family"]
+        if FAMILY_FILTER and family not in FAMILY_FILTER:
+            continue
         cases = doc.get("cases") or {}
         changed = False
         for case_id, case in cases.items():
@@ -345,6 +375,8 @@ def main() -> int:
     for fp in sorted(FIXTURES.glob("*/PARSER.*.yaml")):
         doc = yaml.safe_load(fp.read_text())
         family = doc["family"]
+        if FAMILY_FILTER and family not in FAMILY_FILTER:
+            continue
         for case_id, case in doc["cases"].items():
             n_total += 1
             key = f"{family}/{case_id}"
@@ -361,6 +393,13 @@ def main() -> int:
                 d = check_drift(case, family, case_id, got)
                 if d is not None:
                     drift.append((key, d))
+
+    if FAMILY_FILTER and n_total == 0:
+        print(
+            f"ERROR: --family matched no cases: {', '.join(sorted(FAMILY_FILTER))}",
+            file=sys.stderr,
+        )
+        return 2
 
     mode = "MERGE" if MERGE_MODE else "CHECK"
     print(
